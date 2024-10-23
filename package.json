@@ -1,5 +1,5 @@
 {
-    "name": "nmea0183-log-streamer",
+    "name": "nmea-streamer",
     "version": "1.0.1",
     "description": "The plugin streams a file with NMEA0183 messages to the Signal K server at a configurable speed.",
     "main": "index.js",
