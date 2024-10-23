@@ -1,5 +1,5 @@
-The NMEA0183 log srtreamer is a plugin for a SignalK server. It reads a log file containing NMEA messages and sends then to the SignalK server. It's main feature is its ability of the plugin to stream data at a controlled speed. For this it uses time information from certain messages (CGA, GLL, RMC, ZDA) in the log. The NMEA0183 log srtreamer can be used to relive a sailing trip, to configure instrument displays or to develop plugins using real data.
+The NMEA0183-streamer is a plugin for a SignalK server. It reads a file containing (previously recorded) NMEA messages and sends them to the SignalK server. The main feature of the plugin is its ability to stream the NMEA messages at a controlled speed. For this it uses time information from certain messages (CGA, GLL, RMC, ZDA) in the file. The NMEA0183-srtreamer can be used to relive a sailing trip, to configure instrument displays or to develop plugins using real data.
 <br><br>
-Configuring the plugin and the SignalK server<br>
-The plugin can be installed from the app store. It takes two parameters, filename and speed factor. The speed factor can be used to play the file with increased or decreased speed. <br>
-A data connection must be available for the plugin to send its data to. The connection must be of type NMEA0183 and the data source of this connection must be TCP server on 10110.
+How to configure the plugin and the SignalK server<br>
+The plugin can be installed from the app store. It takes two parameters, filename and speed factor. The speed factor can be used to play control the speed the NMEA messages are sent to the SignalK server. A speed factor of 10 will play the meassages 10 times as fast as they were originally send. <br>
+A data connection must be available in the SignalK server to receive the data from the plugin. The data connection must be of type NMEA0183 and the data source of this connection must be TCP server on 10110.
