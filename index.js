@@ -2,7 +2,7 @@ module.exports = function (app) {
   var plugin = {};
   plugin.id = "nmea-streamer";
   plugin.name = "NMEA-streamer";
-  plugin.description = "The plugin streams a file with NMEA0183 messages to the Signal K server at a configurable speed.";
+  plugin.description = "NMEA streamer plays a file with NMEA0183 messages at a configurable speed.";
   plugin.author = "aswin.bouwmeester@gmail.com";
 
   // Configuratie schema
@@ -20,26 +20,31 @@ module.exports = function (app) {
         title: "Filename",
         description: "Full path to the log file"
       },
-      startTime: {
-        type: "string",
-        title: "Start time",
-        description: "Optional start time in HH:MM:SS format"
-      },
-      endTime: {
-        type: "string",
-        title: "End time",
-        description: "Optional end time in HH:MM:SS format"
-      },
-      speedFactor: {
-        type: "number",
-        title: "Speed Factor",
-        description: "Factor of real-time speed (e.g., 1 is real-time, 2 is twice as fast, etc.)",
-        default: 1
-      }
     }
   };
 
-  let stopEvent = false;
+
+  // Define the playback object
+  const playback = {
+    status: "stopped",
+    currentPosition: null,
+    speed: 1,
+    loopStart: null,
+    loopEnd: null,
+  };
+
+  const file = {
+    baseName: null,
+    path: null,
+    currentPosition: null,
+    targetPosition: null,
+    start: null,
+    end: null,
+    loopStart: null,
+    loopEnd: null
+  };
+
+  //let stopEvent = false;
   const fs = require('fs');
   const readline = require('readline');
   const net = require('net');
@@ -51,25 +56,92 @@ module.exports = function (app) {
   });
 
   client.on('close', () => {
-    stopEvent = true;
+    //stopEvent = true;
+    playback.status = "stoppped";
     app.debug('Connection to TCP server closed');
   });
 
   client.on('error', (error) => {
+    playback.status = "stoppped";
     app.error('TCP Connection Error: ', error);
   });
 
+  plugin.registerWithRouter = function (router) {
+    app.debug('registerWithRouter')
+    router.get('/status', (req, res) => {
+      res.contentType('application/json')
+      res.send(JSON.stringify(getPlayback()))
+    })
+    router.get('/getCurrent', (req, res) => {
+      res.contentType('application/json')
+      res.send(JSON.stringify(wrapMarker(file.currentPosition)));
+    })
+    router.get('/getTarget', (req, res) => {
+      res.contentType('application/json')
+      res.send(JSON.stringify(wrapMarker(file.targetPosition)));
+    })
+    router.post('/play', (req, res) => {
+      if (playback.status != "stopped") playback.status = 'playing';
+      res.status(200).send(JSON.stringify(getPlayback()));
+    })
+    router.post('/pause', (req, res) => {
+      if (playback.status != "stopped") playback.status = 'paused';
+      res.status(200).send(JSON.stringify(getPlayback()));
+    })
+    router.post('/rewind', (req, res) => {
+      playback.targetPosition = playback.start;
+      res.status(200).send(JSON.stringify(getPlayback()));
+    })
+    router.post('/setStart', (req, res) => {
+      file.loopStart = PercentagToDate(req.body.value);
+      res.status(200).send(JSON.stringify(wrapMarker(file.loopStart)));
+    })
+    router.post('/setEnd', (req, res) => {
+      file.loopEnd = PercentagToDate(req.body.value);
+      res.status(200).send(JSON.stringify(wrapMarker(file.loopEnd)));
+    })
+    router.post('/setSpeed', (req, res) => {
+      playback.speed = req.body.value;
+      res.status(200).send(JSON.stringify(getPlayback()));
+    })
+    router.post('/setTarget', (req, res) => {
+      file.targetPosition = PercentagToDate(req.body.value);
+      res.status(200).send(JSON.stringify(wrapMarker(file.targetPosition)));
+    })
+  }
 
-  plugin.start = function (options) {
+  function wrapMarker(date) {
+    return { percentage: dateToPercentage(date), date: date ? date.toLocaleTimeString() : null };
+  }
+
+  function dateToPercentage(date) {
+    if (date === null) return null;
+    return 100.0 * (date.getTime() - file.start.getTime()) / (file.end.getTime() - file.start.getTime());
+  }
+
+  function PercentagToDate(perc) {
+    return new Date((perc / 100.0) * (file.end.getTime() - file.start.getTime()) + file.start.getTime());
+  }
+
+  function getPlayback() {
+    playback.loopStart = dateToPercentage(file.loopStart) ?? 0;
+    playback.loopEnd = dateToPercentage(file.loopEnd) ?? 100;
+    playback.currentPosition = dateToPercentage(file.currentPosition) ?? 0;
+    return playback;
+  }
+
+
+  plugin.start = function (options, restartPlugin) {
 
     // Proces log file
     const processFile = async () => {
-      const fileStream = fs.createReadStream(filename);
+      const fileStream = fs.createReadStream(file.path);
 
       const rl = readline.createInterface({
         input: fileStream,
         crlfDelay: Infinity
       });
+
       const processLine = (line) => {
         return new Promise((resolve) => {
           wait = handleLine(line);
@@ -80,11 +152,14 @@ module.exports = function (app) {
           }
         });
       };
-
       for await (const line of rl) {
-        if (stopEvent) {
-          app.debug(`Stop processing ${filename}`);
+        //if (stopEvent) {
+        if (playback.status == "stopped") {
+          app.debug(`Stop processing ${file.path}`);
           break;
+        }
+        while (playback.status == 'paused') {
+          await new Promise(resolve => setTimeout(resolve, 500));
         }
         await processLine(line);
       }
@@ -95,12 +170,10 @@ module.exports = function (app) {
 
     const startReading = async () => {
       while (true) {
-        if (stopEvent) {
-          stopEvent = false;
-          break;
-        }
         app.debug(`Start processing ${filename}`);
+        playback.status = "playing";
         await processFile();
+        if (playback.status == "stopped") break;
       }
     };
 
@@ -112,31 +185,20 @@ module.exports = function (app) {
       }
       msg = line.substr(3, 3);
       let rmcTime = null;
-      // CGA:1, GLL:5, RMC:1, ZDA:1, 
-      switch (msg) {
-        case 'CGA':
-          rmcTime = toDate(line.split(',')[1]);
-          break;
-        case ('GLL'):
-          rmcTime = toDate(line.split(',')[5]);
-          break;
-        case 'RMC':
-          rmcTime = toDate(line.split(',')[1]);
-          break;
-        case 'ZDA':
-          rmcTime = toDate(line.split(',')[1]);
-          break;
+      if (line.substr(3, 3) == "RMC") {
+        const fields = line.split(',');
+        if (fields[9]) rmcTime = toDate(fields[1], fields[9]);
       }
       if (rmcTime) {
-        if (startTime && startTime < rmcTime) withinTimeWindow=true;
-        if (endTime && endTime < rmcTime) withinTimeWindow=false;
+        file.currentPosition = rmcTime;
       }
+      if (lookingForTarget()) return 0;
 
-      if (!withinTimeWindow) return 0;
+      if (!withinTimeWindow()) return 0;
 
       if (rmcTime) {
         const now = Date.now();
-        const waitTime = Math.min((rmcTime - previousRMCTime), 1000) / speedFactor;
+        const waitTime = Math.min((rmcTime - previousRMCTime), 1000) / playback.speed;
         const elapsedTime = now - previousSendTime;
         wait = Math.max(waitTime - elapsedTime, 0);
         previousRMCTime = rmcTime;
@@ -146,81 +208,147 @@ module.exports = function (app) {
       return wait;
     }
 
-  
-
-  function toDate(time) {
-    const hours = parseInt(time.substr(0, 2), 10);
-    const minutes = parseInt(time.substr(2, 2), 10);
-    const seconds = parseInt(time.substr(4, 2), 10);
-    let miliseconds = parseInt(time.substr(7, 2), 10) * 10;
-    if (isNaN(miliseconds)) miliseconds = 0;
-    return new Date(1970, 0, 1, hours, minutes, seconds, miliseconds);
-  }
-
-  function isValidNMEA0183(line) {
-    // Check if the line starts with a '$'
-    if (!(line.startsWith('$') || line.startsWith('!'))) {
-      return false;
+    function lookingForTarget() {
+      if (file.targetPosition === null) return false;
+      if (Math.abs(file.targetPosition - file.currentPosition) <= 1000) {
+        file.targetPosition = null;
+        return false;
+      }
+      return true;
     }
 
-    // Check if the line contains a valid checksum
-    const parts = line.split('*');
-    if (parts.length !== 2) {
-      return false;
+    function withinTimeWindow() {
+      let within = false;
+      if (!file.loopStart || file.loopStart < file.currentPosition) within = true;
+      if (file.loopEnd && file.loopEnd < file.currentPosition) within = false;
+      return within;
     }
 
-    const message = parts[0].substring(1); // Remove the starting '$'
-    const checksum = parts[1];
-
-    // Calculate the checksum
-    let calculatedChecksum = 0;
-    for (let i = 0; i < message.length; i++) {
-      calculatedChecksum ^= message.charCodeAt(i);
+    function toDate(time, datum) {
+      const day = parseInt(datum.substr(0, 2), 10);
+      const month = parseInt(datum.substr(2, 2), 10) - 1;
+      const year = parseInt(datum.substr(4, 2), 10) + 2000;
+      const hours = parseInt(time.substr(0, 2), 10);
+      const minutes = parseInt(time.substr(2, 2), 10);
+      const seconds = parseInt(time.substr(4, 2), 10);
+      let miliseconds = parseInt(time.substr(7, 2), 10) * 10;
+      if (isNaN(miliseconds)) miliseconds = 0;
+      return new Date(year, month, day, hours, minutes, seconds, miliseconds);
     }
 
-    // Convert the checksum to a two-digit hexadecimal
-    const hexChecksum = calculatedChecksum.toString(16).toUpperCase().padStart(2, '0');
+    function isValidNMEA0183(line) {
+      // Check if the line starts with a '$'
+      if (!(line.startsWith('$') || line.startsWith('!'))) {
+        return false;
+      }
 
-    // Check if the calculated checksum matches the given checksum
-    return hexChecksum === checksum;
-  }
+      // Check if the line contains a valid checksum
+      const parts = line.split('*');
+      if (parts.length !== 2) {
+        return false;
+      }
 
-  let previousRMCTime = new Date(1970, 0, 1);
-  let previousSendTime = new Date(1970, 0, 1);
+      const message = parts[0].substring(1); // Remove the starting '$'
+      const checksum = parts[1];
 
-  app.debug("Plugin started with options: ", options);
-  stopEvent = false;
+      // Calculate the checksum
+      let calculatedChecksum = 0;
+      for (let i = 0; i < message.length; i++) {
+        calculatedChecksum ^= message.charCodeAt(i);
+      }
 
-  // Ensure the filename is given in a full path format
-  const filename = options.filename ? path.resolve(options.filename) : null;
-  const speedFactor = options.speedFactor || 1;
-  if (options.startTime !== "" && options.startTime !== undefined) {
-    startTime = toDate(options.startTime.replace(/:/g, ''));
-  } else {
-    startTime=0;
-  }
-  if (options.endTime !== "" && options.endTime !== undefined) {
-    endTime = toDate(options.endTime.replace(/:/g, ''));
-  } else {
-    endTime=0;
-  }
-  let withinTimeWindow =false;
+      // Convert the checksum to a two-digit hexadecimal
+      const hexChecksum = calculatedChecksum.toString(16).toUpperCase().padStart(2, '0');
+
+      // Check if the calculated checksum matches the given checksum
+      return hexChecksum === checksum;
+    }
+
+    let previousRMCTime = new Date(1970, 0, 1);
+    let previousSendTime = new Date(1970, 0, 1);
+
+    app.debug("Plugin started with options: ", options);
+    //stopEvent = false;
+
+    // Ensure the filename is given in a full path format
+    const filename = options.filename ? path.resolve(options.filename) : null;
+    if (filename != null) {
+      file.baseName = path.basename(filename);
+      file.path = filename;
+    }
+    else {
+      file.baseName = null;
+      file.path = null;
+    }
+    playback.status = 'stopped';
+    playback.speed = 1;
 
 
-  if (!filename) {
-    app.error("No filename provided");
-    return;
-  } else {
-    startReading();
-  }
-};
+
+    const fs = require('fs');
+    const readline2 = require('readline');
+
+    async function analyseFile() {
+      const fileStream = fs.createReadStream(file.path);
+
+      const rl = readline.createInterface({
+        input: fileStream,
+        crlfDelay: Infinity  // Handles different newline characters
+      });
+
+      for await (const line of rl) {
+        scanLine(line);
+      }
+      ;
+    }
 
 
 
-plugin.stop = function () {
-  stopEvent = true;
-  app.debug("Stopping plugin");
-};
+    function scanLine(line) {
+      if (!isValidNMEA0183(line)) return 0;
+      if (line.substr(3, 3) != "RMC") return 0;
+      const fields = line.split(',');
+      if (!fields[9]) return;
+      const dateTime = toDate(fields[1], fields[9]);
+      if (!file.start) {
+        file.start = dateTime;
+      }
+      file.end = dateTime;
+      return 0;
+    }
 
-return plugin;
+    if (!file.path) {
+      app.error("No filename provided");
+      return;
+    } else {
+      file.currentPosition = null;
+      file.targetPosition = null;
+      file.start = null;
+      file.end = null;
+      file.loopStart = null;
+      file.loopEnd = null;
+      app.debug("Analysing file");
+      analyseFile()
+        .then(result => {
+          file.loopStart = file.start;
+          file.loopEnd = file.end;
+          app.debug(file);
+        });
+      /* .catch(err => {
+        app.error('Error analysing file:', err);
+      }); */
+      app.debug(file);
+      startReading();
+    }
+  };
+
+
+
+  plugin.stop = function () {
+    //stopEvent = true;
+    playback.status = "stopped";
+    app.debug("Stopping plugin");
+  };
+
+  return plugin;
 };

@@ -1,7 +1,7 @@
 {
   "name": "nmea-streamer",
-  "version": "1.0.1",
-  "description": "The plugin streams a file with NMEA0183 messages to the Signal K server at a configurable speed.",
+  "version": "2.0.0",
+  "description": "The plugin streams a file with NMEA0183 messages to the SignalK server at a configurable speed.",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -9,10 +9,12 @@
   "author": "aswin.bouwmeester@gmail.com",
   "license": "ISC",
   "dependencies": {
+    "cors": "^2.8.5",
     "fs": "^0.0.1-security",
     "net": "^1.0.2",
     "readline": "^1.3.0",
-    "signalk-server": "^1.0.0"
+    "signalk-server": "^1.0.0",
+    "socket.io": "^4.8.1"
   },
   "repository": {
     "type": "git",
@@ -22,7 +24,12 @@
     "url": "https://github.com/Asw1n/NMEA0183-log-streamer/issues"
   },
   "homepage": "https://github.com/Asw1n/NMEA0183-log-streamer#readme",
+  "signalk": {
+    "appIcon": "./play.png",
+    "displayName": "NMEA streamer"
+  },
   "keywords": [
+    "signalk-webapp",
     "signalk-node-server-plugin",
     "signalk-category-nmea-0183",
     "signalk-category-utility"

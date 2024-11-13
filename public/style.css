@@ -1,0 +1,185 @@
+body {
+    font-family: Arial, sans-serif;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    background-color: #333;
+    color: white;
+    margin: 0;
+    position: relative;
+}
+
+.container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+}
+
+/* Progress Container */
+.progress-container {
+    width: 100%;
+    max-width: 500px;
+    padding: 20px;
+    background-color: #222;
+    border-radius: 15px;
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.6);
+    display: flex;
+    justify-content: center;
+}
+
+.file-info{
+    width: 100%;
+    max-width: 500px;
+    padding: 20px;
+    background-color: #222;
+    border-radius: 15px;
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.6);
+    display: flex;
+    justify-content: center;
+}
+
+/* Progress Bar */
+.progress-bar {
+    position: relative;
+    width: 100%;
+    height: 10px;
+    background-color: #555;
+    border-radius: 5px;
+    cursor: pointer;
+}
+
+.loop-start,
+.loop-end {
+    position: absolute;
+    width: 4px;
+    height: 20px;
+    background-color: #00ff00; /* Green color for loop markers */
+    top: -5px;
+    border-radius: 2px;
+    display: block; /* Temporarily set to block to check visibility */
+}
+
+.loop-start {
+    left: 0;
+}
+
+.loop-end {
+    right: 0;
+}
+
+.playhead {
+    position: absolute;
+    height: 100%;
+    width: 10px;
+    background-color: #f00;
+    border-radius: 5px;
+    transform: translateX(-50%);
+    display: inline-block;
+}
+
+.target {
+    position: absolute;
+    height: 100%;
+    width: 10px;
+    background-color: #00f;
+    border-radius: 5px;
+    transform: translateX(-50%);
+    display: inline-block;
+    visibility: hidden;
+}
+
+.tooltiptext {
+    visibility: hidden;
+    width: 120px;
+    background-color: #111;
+    color: #fff;
+    text-align: center;
+    border-radius: 5px;
+    padding: 5px;
+    position: absolute;
+    z-index: 1;
+    bottom: 125%; /* Position the tooltip above the text */
+    left: 50%;
+    margin-left: -60px; /* Center the tooltip */
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+  
+  .loop-start:hover .tooltiptext,
+  .loop-end:hover .tooltiptext,
+  .playhead:hover .tooltiptext,
+  .target:hover .tooltiptext {
+    visibility: visible;
+    opacity: 1;
+  }
+
+/* Control Buttons Area */
+.dvd-controls {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    padding: 20px;
+    background-color: #222;
+    border-radius: 15px;
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.6);
+    width: 100%;
+    max-width: 500px;
+}
+
+.control-button {
+    font-size: 22px;
+    color: #fff;
+    background-color: #555;
+    border: none;
+    border-radius: 50%;
+    width: 60px;
+    height: 60px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background-color 0.3s, transform 0.1s;
+    box-shadow: 0 3px 5px rgba(0, 0, 0, 0.3);
+}
+
+.control-button:hover {
+    background-color: #777;
+}
+
+.control-button:active {
+    transform: scale(0.95);
+}
+
+.control-button:focus {
+    outline: none;
+}
+
+.speed-label {
+    font-size: 20px;
+    margin-right: 8px;
+}
+
+.speed-select {
+    font-size: 20px;
+    padding: 8px;
+    border: none;
+    border-radius: 8px;
+    background-color: #555;
+    color: white;
+    cursor: pointer;
+}
+
+.speed-select:focus {
+    outline: none;
+}
+
+#status {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 22px;
+    text-align: center;
+}
