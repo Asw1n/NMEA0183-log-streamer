@@ -14,6 +14,22 @@ markerCurrent.position = 0;
 markerTarget.endpoint = "setTarget";
 markerTarget.position = null;
 
+const play = {
+    markerCurrent: null,
+    markerTarget: null,
+    markerStart: null,
+    markerEnd: null,
+    speed: 1,
+    status: "stopped"
+};
+
+const file = {
+    baseName: null,
+    path: null,
+    start: null,
+    end: null,
+};
+
 
 function enableDragging(marker) {
     marker.addEventListener('mousedown', (event) => {
@@ -37,21 +53,99 @@ function onDrag(event, marker) {
     const barRect = progressBar.getBoundingClientRect();
     const barWidth = barRect.width;
     const offsetX = event.clientX - barRect.left;
-    marker.position = Math.min(100, Math.max(0, (offsetX / barWidth) * 100));
-    marker.style.left = `${marker.position}%`;
-    postMarker(marker);
+    position = Math.min(100, Math.max(0, (offsetX / barWidth) * 100));
+    //marker.style.left = `${position}%`;
+    play[marker.id] = PercentageToDate(position);
+    setPlay();
+
+
 }
 
-async function sendControlRequest(endpoint) {
-    postToServer(endpoint)
-        .then(status => {
-            const statusline = document.getElementById('status');
-            statusline.textContent = status.status;
+
+function dateToPercentage(date) {
+    if (date === null) return null;
+    return 100.0 * (date.getTime() - file.start.getTime()) / (file.end.getTime() - file.start.getTime());
+}
+
+function PercentageToDate(perc) {
+    return new Date((perc / 100.0) * (file.end.getTime() - file.start.getTime()) + file.start.getTime());
+}
+
+
+function getFile() {
+    getFromServer("getFile")
+        .then(data => {
+            file.baseName = data.baseName;
+            file.path = data.path;
+            file.start = new Date(data.start);
+            file.end = new Date(data.end);
         })
         .catch(error => {
-            console.error("Error while sending control", error);
+            console.error("Error while getting file", error);
         });
 }
+
+function getPlay() {
+    getFromServer("getPlay")
+        .then(data => {
+            updatePlay(data);
+            updateMarkers();
+            updateStatus( play.status);
+        })
+        .catch(error => {
+            console.error("Error while getting play", error);
+        });
+}
+
+function setPlay() {
+    const to = {
+        status: play.status,
+        speed: play.speed,
+        markerTarget: play.markerTarget === null ? null : play.markerTarget.toISOString(),
+        markerStart: play.markerStart === null ? null : play.markerStart.toISOString(),
+        markerEnd: play.markerEnd === null ? null : play.markerEnd.toISOString()
+    }
+    postToServer("setPlay", to)
+        .then(data => {
+            updatePlay(data);
+            updateMarkers();
+            updateStatus( play.status);
+        })
+        .catch(error => {
+            console.error("Error while setting play", error);
+        });
+}
+
+
+function updatePlay(data) {
+    play.status = data.status;
+    play.speed = data.speed;
+    play.markerCurrent = data.markerCurrent === null ? null : new Date(data.markerCurrent);
+    play.markerTarget = data.markerTarget === null ? null : new Date(data.markerTarget);
+    play.markerStart = data.markerStart === null ? null : new Date(data.markerStart);
+    play.markerEnd = data.markerEnd === null ? null : new Date(data.markerEnd);
+}
+
+function updateMarkers() {
+    placeMarker(markerStart, play.markerStart);
+    placeMarker(markerEnd, play.markerEnd);
+    placeMarker(markerCurrent, play.markerCurrent);
+    placeMarker(markerTarget, play.markerTarget);
+}
+
+function placeMarker(marker, date) {
+    if (date === null) {
+        markerTarget.style.visibility = "hidden";
+    }
+    else {
+        markerTarget.style.visibility = "visible";
+        marker.style.left = `${dateToPercentage(date)}%`;
+        marker.firstElementChild.innerHTML = date.toLocaleTimeString();
+    }
+}
+
+
+
 
 async function postToServer(endpoint, value = null) {
     try {
@@ -86,21 +180,7 @@ async function getFromServer(endpoint) {
     }
 }
 
-function postMarker(marker) {
-    postToServer(marker.endpoint, marker.position)
-        .then(data => {
-            // Handle the returned data here
-            marker.style.left = `${data.percentage}%`;
-            marker.style.display = 'block';
-            const tooltip = marker.firstElementChild;
-            if (tooltip !== null) {
-                tooltip.innerHTML = data.date;
-            }
-        })
-        .catch(error => {
-            console.error("Error while setting marker", error);
-        });
-}
+
 
 function updateStatus(message) {
     document.getElementById('status').textContent = message;
@@ -128,61 +208,33 @@ function requestStatusUpdate() {
         });
 }
 
-function updateCurrent() {
+function update() {
     setInterval(() => {
-        getFromServer("getCurrent")
-            .then(data => {
-                markerCurrent.style.left = `${data.percentage}%`;
-                markerCurrent.position = data.percentage;
-                markerCurrent.firstElementChild.innerHTML = data.date;
-            })
-            .catch(error => {
-                console.error('Error fetching current position from the server:', error);
-            });
-            getFromServer("getTarget")
-            .then(data => {
-                if (data.percentage !== null) {
-                markerTarget.style.left = `${data.percentage}%`;
-                markerCurrent.position = data.percentage;
-                markerCurrent.firstElementChild.innerHTML = data.date;
-                markerTarget.style.visibility= "visible";
-                }
-                else {
-                  markerTarget.style.visibility= "hidden"; 
-                }
-            })
-            .catch(error => {
-                console.error('Error fetching current position from the server:', error);
-            });
+        getPlay();
     }, 1000);
 }
-
+/*
 progressBar.addEventListener('click', (event) => {
-    const barWidth = progressBar.offsetWidth;
-    markerTarget.position = event.offsetX / barWidth * 100; // Get percentage
-    postMarker(markerTarget);
-    markerTarget.style.visibility = "visible";
-    markerTarget.style.left = `${markerTarget.position}%`;
+    if (event.offsetX) { //mouse drag interferes with click event, quick and dirty solution
+        const barWidth = progressBar.offsetWidth;
+
+        markerTarget.position = event.offsetX / barWidth * 100; // Get percentage
+        postMarker(markerTarget);
+        markerTarget.style.visibility = "visible";
+        markerTarget.style.left = `${markerTarget.position}%`;
+    }
 });
+*/
 
 window.onload = () => {
+    updateMarkers();
     enableDragging(markerStart);
     enableDragging(markerEnd);
     // Add event listeners to buttons
-    document.getElementById('rewindButton').addEventListener('click', () => sendControlRequest('rewind'));
-    document.getElementById('playButton').addEventListener('click', () => sendControlRequest('play'));
-    document.getElementById('pauseButton').addEventListener('click', () => sendControlRequest('pause'));
-    // Handle play speed changes
-    document.getElementById('speedSelect').addEventListener('change', (event) => {
-        const speed = event.target.value;
-        postToServer(`setSpeed`, parseFloat(speed))
-            .then(data => {
-                
-            })
-            .catch(error => {
-                console.error("Error while sending control", error);
-            });
-    });
-    requestStatusUpdate();
-    updateCurrent();
+    document.getElementById('rewindButton').addEventListener('click', () => { play.markerTarget = play.markerStart; setPlay(); });
+    document.getElementById('playButton').addEventListener('click', () => { play.status = "playing"; setPlay(); });
+    document.getElementById('pauseButton').addEventListener('click', () => { play.status = "paused"; setPlay(); });
+    document.getElementById('speedSelect').addEventListener('change', (event) => { play.speed = event.target.value; setPlay(); });
+    getFile();
+    update();
 };

@@ -24,24 +24,20 @@ module.exports = function (app) {
   };
 
 
-  // Define the playback object
-  const playback = {
+  const play = {
     status: "stopped",
-    currentPosition: null,
     speed: 1,
-    loopStart: null,
-    loopEnd: null,
+    markerCurrent: null,
+    markerTarget: null,
+    markerStart: null,
+    markerEnd: null,
   };
 
   const file = {
     baseName: null,
     path: null,
-    currentPosition: null,
-    targetPosition: null,
     start: null,
     end: null,
-    loopStart: null,
-    loopEnd: null
   };
 
   //let stopEvent = false;
@@ -57,78 +53,62 @@ module.exports = function (app) {
 
   client.on('close', () => {
     //stopEvent = true;
-    playback.status = "stoppped";
     app.debug('Connection to TCP server closed');
   });
 
   client.on('error', (error) => {
-    playback.status = "stoppped";
     app.error('TCP Connection Error: ', error);
   });
 
   plugin.registerWithRouter = function (router) {
-    app.debug('registerWithRouter')
-    router.get('/status', (req, res) => {
-      res.contentType('application/json')
-      res.send(JSON.stringify(getPlayback()))
+    app.debug('registerWithRouter');
+
+    router.get('/getFile', (req, res) => {
+      const to = {
+        baseName: file.baseName,
+        path: file.path,
+        start: file.start.toISOString(),
+        end: file.end.toISOString(),
+      }
+      res.contentType('application/json');
+      res.send(JSON.stringify(to));
     })
-    router.get('/getCurrent', (req, res) => {
-      res.contentType('application/json')
-      res.send(JSON.stringify(wrapMarker(file.currentPosition)));
+
+    router.get('/getPlay', (req, res) => {
+      const to = {
+        status: play.status,
+        speed: play.speed,
+        markerCurrent: play.markerCurrent === null ? null : play.markerCurrent.toISOString(),
+        markerTarget: play.markerTarget === null ? null : play.markerTarget.toISOString(),
+        markerStart: play.markerStart === null ? null : play.markerStart.toISOString(),
+        markerEnd: play.markerEnd === null ? null : play.markerEnd.toISOString()
+      }
+      res.contentType('application/json');
+      res.send(JSON.stringify(to));
     })
-    router.get('/getTarget', (req, res) => {
-      res.contentType('application/json')
-      res.send(JSON.stringify(wrapMarker(file.targetPosition)));
+
+    router.post('/setPlay', (req, res) => {
+      const v = req.body.value;
+      play.status = v.status;
+      play.speed = v.speed;
+      play.markerTarget = v.markerTarget === null ? null : new Date(v.markerTarget);
+      play.markerStart = v.markerStart === null ? null : new Date(v.markerStart);
+      play.markerEnd = v.markerEnd === null ? null : new Date(v.markerEnd);
+      app.debug(play);
+      const to = {
+          status: play.status,
+          speed: play.speed,
+          markerCurrent: play.markerCurrent === null ? null : play.markerCurrent.toISOString(),
+          markerTarget: play.markerTarget === null ? null : play.markerTarget.toISOString(),
+          markerStart: play.markerStart === null ? null : play.markerStart.toISOString(),
+          markerEnd: play.markerEnd === null ? null : play.markerEnd.toISOString()
+        }      
+      res.contentType('application/json');
+      res.status(200).send(JSON.stringify(to));
     })
-    router.post('/play', (req, res) => {
-      if (playback.status != "stopped") playback.status = 'playing';
-      res.status(200).send(JSON.stringify(getPlayback()));
-    })
-    router.post('/pause', (req, res) => {
-      if (playback.status != "stopped") playback.status = 'paused';
-      res.status(200).send(JSON.stringify(getPlayback()));
-    })
-    router.post('/rewind', (req, res) => {
-      playback.targetPosition = playback.start;
-      res.status(200).send(JSON.stringify(getPlayback()));
-    })
-    router.post('/setStart', (req, res) => {
-      file.loopStart = PercentagToDate(req.body.value);
-      res.status(200).send(JSON.stringify(wrapMarker(file.loopStart)));
-    })
-    router.post('/setEnd', (req, res) => {
-      file.loopEnd = PercentagToDate(req.body.value);
-      res.status(200).send(JSON.stringify(wrapMarker(file.loopEnd)));
-    })
-    router.post('/setSpeed', (req, res) => {
-      playback.speed = req.body.value;
-      res.status(200).send(JSON.stringify(getPlayback()));
-    })
-    router.post('/setTarget', (req, res) => {
-      file.targetPosition = PercentagToDate(req.body.value);
-      res.status(200).send(JSON.stringify(wrapMarker(file.targetPosition)));
-    })
+
   }
 
-  function wrapMarker(date) {
-    return { percentage: dateToPercentage(date), date: date ? date.toLocaleTimeString() : null };
-  }
-
-  function dateToPercentage(date) {
-    if (date === null) return null;
-    return 100.0 * (date.getTime() - file.start.getTime()) / (file.end.getTime() - file.start.getTime());
-  }
-
-  function PercentagToDate(perc) {
-    return new Date((perc / 100.0) * (file.end.getTime() - file.start.getTime()) + file.start.getTime());
-  }
-
-  function getPlayback() {
-    playback.loopStart = dateToPercentage(file.loopStart) ?? 0;
-    playback.loopEnd = dateToPercentage(file.loopEnd) ?? 100;
-    playback.currentPosition = dateToPercentage(file.currentPosition) ?? 0;
-    return playback;
-  }
 
 
   plugin.start = function (options, restartPlugin) {
@@ -154,11 +134,11 @@ module.exports = function (app) {
       };
       for await (const line of rl) {
         //if (stopEvent) {
-        if (playback.status == "stopped") {
+        if (play.status == "stopped") {
           app.debug(`Stop processing ${file.path}`);
           break;
         }
-        while (playback.status == 'paused') {
+        while (play.status == 'paused') {
           await new Promise(resolve => setTimeout(resolve, 500));
         }
         await processLine(line);
@@ -171,9 +151,9 @@ module.exports = function (app) {
     const startReading = async () => {
       while (true) {
         app.debug(`Start processing ${filename}`);
-        playback.status = "playing";
+        play.status = "playing";
         await processFile();
-        if (playback.status == "stopped") break;
+        if (play.status == "stopped") break;
       }
     };
 
@@ -190,7 +170,7 @@ module.exports = function (app) {
         if (fields[9]) rmcTime = toDate(fields[1], fields[9]);
       }
       if (rmcTime) {
-        file.currentPosition = rmcTime;
+        play.markerCurrent = rmcTime;
       }
       if (lookingForTarget()) return 0;
 
@@ -198,7 +178,7 @@ module.exports = function (app) {
 
       if (rmcTime) {
         const now = Date.now();
-        const waitTime = Math.min((rmcTime - previousRMCTime), 1000) / playback.speed;
+        const waitTime = Math.min((rmcTime - previousRMCTime), 1000.0) / play.speed;
         const elapsedTime = now - previousSendTime;
         wait = Math.max(waitTime - elapsedTime, 0);
         previousRMCTime = rmcTime;
@@ -208,19 +188,24 @@ module.exports = function (app) {
       return wait;
     }
 
+    // improvements posible. when going from under to over target
     function lookingForTarget() {
-      if (file.targetPosition === null) return false;
-      if (Math.abs(file.targetPosition - file.currentPosition) <= 1000) {
-        file.targetPosition = null;
+      if (play.markerTarget === null) return false;
+      if (Math.abs(play.markerTarget - play.markerCurrent) <= 1000) {
+        play.markerTarget = null;
+        play.status = "playing";
         return false;
       }
+      play.status = "skipping";
       return true;
     }
 
     function withinTimeWindow() {
       let within = false;
-      if (!file.loopStart || file.loopStart < file.currentPosition) within = true;
-      if (file.loopEnd && file.loopEnd < file.currentPosition) within = false;
+      if (!play.markerStart || play.markerStart < play.markerCurrent) within = true;
+      if (play.markerEnd && play.markerEnd < play.markerCurrent) within = false;
+      if (within) {play.status = "playing";}
+      else {play.status = "skipping";}
       return within;
     }
 
@@ -280,8 +265,8 @@ module.exports = function (app) {
       file.baseName = null;
       file.path = null;
     }
-    playback.status = 'stopped';
-    playback.speed = 1;
+    play.status = 'stopped';
+    play.speed = 1;
 
 
 
@@ -321,23 +306,24 @@ module.exports = function (app) {
       app.error("No filename provided");
       return;
     } else {
-      file.currentPosition = null;
-      file.targetPosition = null;
+      play.markerCurrent = null;
+      play.markerTarget = null;
       file.start = null;
       file.end = null;
-      file.loopStart = null;
-      file.loopEnd = null;
+      play.markerStart = null;
+      play.markerEnd = null;
       app.debug("Analysing file");
       analyseFile()
         .then(result => {
-          file.loopStart = file.start;
-          file.loopEnd = file.end;
+          play.markerStart = file.start;
+          play.markerEnd = file.end;
+          play.markerCurrent = file.start;
           app.debug(file);
+          app.debug(play);
         });
       /* .catch(err => {
         app.error('Error analysing file:', err);
       }); */
-      app.debug(file);
       startReading();
     }
   };
@@ -346,7 +332,7 @@ module.exports = function (app) {
 
   plugin.stop = function () {
     //stopEvent = true;
-    playback.status = "stopped";
+    play.status = "stopped";
     app.debug("Stopping plugin");
   };
 
