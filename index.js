@@ -31,6 +31,7 @@ module.exports = function (app) {
     markerTarget: null,
     markerStart: null,
     markerEnd: null,
+    startedBefore: null,
   };
 
   const file = {
@@ -46,72 +47,110 @@ module.exports = function (app) {
   const net = require('net');
   const path = require('path');
   const client = new net.Socket();
+  const { getDate,
+    getDateTimeRange,
+    isNmeaMessage,
+    isAisMessage, } = require('./nmeautils');
   // Connect to TCP server
-  client.connect(10110, 'localhost', () => {
-    app.debug('Connected to TCP server');
-  });
+  {
+    client.connect(10110, 'localhost', () => {
+      app.debug('Connected to TCP server');
+    });
 
-  client.on('close', () => {
-    //stopEvent = true;
-    app.debug('Connection to TCP server closed');
-  });
+    client.on('close', () => {
+      //stopEvent = true;
+      app.debug('Connection to TCP server closed');
+    });
 
-  client.on('error', (error) => {
-    app.error('TCP Connection Error: ', error);
-  });
+    client.on('error', (error) => {
+      app.error('TCP Connection Error: ', error);
+    });
+  }
+
 
   plugin.registerWithRouter = function (router) {
     app.debug('registerWithRouter');
 
     router.get('/getFile', (req, res) => {
-      const to = {
-        baseName: file.baseName,
-        path: file.path,
-        start: file.start.toISOString(),
-        end: file.end.toISOString(),
-      }
-      res.contentType('application/json');
-      res.send(JSON.stringify(to));
-    })
+      const { baseName, path, start, end } = file;
+      res.json({
+        baseName,
+        path,
+        start: start?.toISOString() || null,
+        end: end?.toISOString() || null,
+      });
+    });
 
     router.get('/getPlay', (req, res) => {
-      const to = {
-        status: play.status,
-        speed: play.speed,
-        markerCurrent: play.markerCurrent === null ? null : play.markerCurrent.toISOString(),
-        markerTarget: play.markerTarget === null ? null : play.markerTarget.toISOString(),
-        markerStart: play.markerStart === null ? null : play.markerStart.toISOString(),
-        markerEnd: play.markerEnd === null ? null : play.markerEnd.toISOString()
-      }
-      res.contentType('application/json');
-      res.send(JSON.stringify(to));
+      res.status(200).send(wrapPlay());
+    });
+
+    router.post('/markerStart', (req, res) => {
+      const markerStart = new Date(req.body.value);
+      if (play.markerEnd > markerStart && markerStart < play.markerCurrent) play.markerStart = markerStart;
+      res.status(200).json(play.markerStart.toISOString());
     })
 
+    router.post('/markerEnd', (req, res) => {
+      const markerEnd = new Date(req.body.value);
+      if ( play.markerStart < markerEnd &&markerEnd > play.markerCurrent) play.markerEnd = markerEnd;
+      res.status(200).json(play.markerEnd.toISOString());
+    })
+
+    router.post('/markerTarget', (req, res) => {
+      const markerTarget = new Date(req.body.value);
+      play.markerTarget = markerTarget;
+      res.status(200).json(play.markerTarget.toISOString());
+    })
+
+    router.post('/status', (req, res) => {
+      const valid =["playing","paused"];
+      const status = req.body.value;
+      if (play.status !="stopped" && valid.includes(status)) play.status=status;
+      res.status(200).json(play.status);
+    })
+
+    router.post('/speed', (req, res) => {
+      app.debug(req.body.value);
+     play.speed = req.body.value;
+     res.status(200).json(play.speed);
+    })
+
+
     router.post('/setPlay', (req, res) => {
-      const v = req.body.value;
-      play.status = v.status;
-      play.speed = v.speed;
-      play.markerTarget = v.markerTarget === null ? null : new Date(v.markerTarget);
-      play.markerStart = v.markerStart === null ? null : new Date(v.markerStart);
-      play.markerEnd = v.markerEnd === null ? null : new Date(v.markerEnd);
-      app.debug(play);
-      const to = {
-          status: play.status,
-          speed: play.speed,
-          markerCurrent: play.markerCurrent === null ? null : play.markerCurrent.toISOString(),
-          markerTarget: play.markerTarget === null ? null : play.markerTarget.toISOString(),
-          markerStart: play.markerStart === null ? null : play.markerStart.toISOString(),
-          markerEnd: play.markerEnd === null ? null : play.markerEnd.toISOString()
-        }      
-      res.contentType('application/json');
-      res.status(200).send(JSON.stringify(to));
+      
+      const changes = req.body.value;
+      if ('status' in changes) play.status = changes.status;
+      if ('speed' in changes) play.speed = changes.speed;
+      if ('markerTarget' in changes){
+        if (changes.markerTarget !== null) play.markerTarget = new Date(changes.markerTarget);
+      } 
+      if ('markerStart' in changes){
+       if (play.markerEnd > new Date(changes.markerStart)) play.markerStart = new Date(changes.markerStart);
+      }
+      if ('markerEnd' in changes){
+        if (play.markerStart < new Date(changes.markerEnd)) play.markerEnd = new Date(changes.markerEnd);
+      }
+        
+      res.status(200).send(wrapPlay());
     })
 
   }
 
+  function wrapPlay() {
+    return {
+      status: play.status,
+      speed: play.speed,
+      markerTarget: play.markerTarget ? new Date(play.markerTarget) : null,
+      markerStart: play.markerStart ? new Date(play.markerStart) : null,
+      markerEnd: play.markerEnd ? new Date(play.markerEnd) : null,
+      markerCurrent: play.markerCurrent ? new Date(play.markerCurrent) : null
+    };
+  }
 
 
-  plugin.start = function (options, restartPlugin) {
+
+  plugin.start = async function (options, restartPlugin) {
 
     // Proces log file
     const processFile = async () => {
@@ -150,7 +189,7 @@ module.exports = function (app) {
 
     const startReading = async () => {
       while (true) {
-        app.debug(`Start processing ${filename}`);
+        app.debug(`Start processing ${file.baseName}`);
         play.status = "playing";
         await processFile();
         if (play.status == "stopped") break;
@@ -159,28 +198,23 @@ module.exports = function (app) {
 
     function handleLine(line) {
       let wait = 0;
-      if (!isValidNMEA0183(line)) {
-        //app.debug(`msg ignored: ${line}`);
-        return 0;
-      }
-      msg = line.substr(3, 3);
-      let rmcTime = null;
-      if (line.substr(3, 3) == "RMC") {
-        const fields = line.split(',');
-        if (fields[9]) rmcTime = toDate(fields[1], fields[9]);
-      }
+      if (!isNmeaMessage(line) && !isAisMessage(line)) return 0;
+      const rmcTime = getDate(line);
       if (rmcTime) {
         play.markerCurrent = rmcTime;
       }
+      play.status='skipping';
+      //lookingForTarget();
       if (lookingForTarget()) return 0;
-
       if (!withinTimeWindow()) return 0;
+      play.status='playing';
 
       if (rmcTime) {
         const now = Date.now();
-        const waitTime = Math.min((rmcTime - previousRMCTime), 1000.0) / play.speed;
+        waitTime = previousRMCTime ? (rmcTime - previousRMCTime) / play.speed : 0;
         const elapsedTime = now - previousSendTime;
         wait = Math.max(waitTime - elapsedTime, 0);
+        if (wait < 100) wait = 0;
         previousRMCTime = rmcTime;
         previousSendTime = now;
       }
@@ -188,144 +222,57 @@ module.exports = function (app) {
       return wait;
     }
 
-    // improvements posible. when going from under to over target
+
     function lookingForTarget() {
       if (play.markerTarget === null) return false;
-      if (Math.abs(play.markerTarget - play.markerCurrent) <= 1000) {
+      if (play.startedBefore === null) {
+        play.startedBefore = play.markerCurrent < play.markerTarget ? true : false;
+        return true;
+      }
+      const before = play.markerCurrent <= play.markerTarget ? true : false;
+      //app.debug(`startedBefore=${play.startedBefore}, before=${before}`);
+      if ((play.startedBefore && !before) || (!play.startedBefore && before)) {
+        play.startedBefore = null;
         play.markerTarget = null;
-        play.status = "playing";
         return false;
       }
-      play.status = "skipping";
-      return true;
+      else {
+        //app.debug('Still looking for target');
+        return true;
+      }
     }
 
     function withinTimeWindow() {
-      let within = false;
-      if (!play.markerStart || play.markerStart < play.markerCurrent) within = true;
-      if (play.markerEnd && play.markerEnd < play.markerCurrent) within = false;
-      if (within) {play.status = "playing";}
-      else {play.status = "skipping";}
-      return within;
-    }
-
-    function toDate(time, datum) {
-      const day = parseInt(datum.substr(0, 2), 10);
-      const month = parseInt(datum.substr(2, 2), 10) - 1;
-      const year = parseInt(datum.substr(4, 2), 10) + 2000;
-      const hours = parseInt(time.substr(0, 2), 10);
-      const minutes = parseInt(time.substr(2, 2), 10);
-      const seconds = parseInt(time.substr(4, 2), 10);
-      let miliseconds = parseInt(time.substr(7, 2), 10) * 10;
-      if (isNaN(miliseconds)) miliseconds = 0;
-      return new Date(year, month, day, hours, minutes, seconds, miliseconds);
-    }
-
-    function isValidNMEA0183(line) {
-      // Check if the line starts with a '$'
-      if (!(line.startsWith('$') || line.startsWith('!'))) {
-        return false;
-      }
-
-      // Check if the line contains a valid checksum
-      const parts = line.split('*');
-      if (parts.length !== 2) {
-        return false;
-      }
-
-      const message = parts[0].substring(1); // Remove the starting '$'
-      const checksum = parts[1];
-
-      // Calculate the checksum
-      let calculatedChecksum = 0;
-      for (let i = 0; i < message.length; i++) {
-        calculatedChecksum ^= message.charCodeAt(i);
-      }
-
-      // Convert the checksum to a two-digit hexadecimal
-      const hexChecksum = calculatedChecksum.toString(16).toUpperCase().padStart(2, '0');
-
-      // Check if the calculated checksum matches the given checksum
-      return hexChecksum === checksum;
+      return (play.markerCurrent > play.markerStart && play.markerCurrent < play.markerEnd);
     }
 
     let previousRMCTime = new Date(1970, 0, 1);
     let previousSendTime = new Date(1970, 0, 1);
 
     app.debug("Plugin started with options: ", options);
-    //stopEvent = false;
+    try {
+      // Check if the file exists and is readable
+      await fs.promises.access(options.filename, fs.constants.R_OK);
+    } catch (error) {
+      play.status = 'stopped';
+      app.status("Stopped");
 
-    // Ensure the filename is given in a full path format
-    const filename = options.filename ? path.resolve(options.filename) : null;
-    if (filename != null) {
-      file.baseName = path.basename(filename);
-      file.path = filename;
+      throw new Error(`Failed to access: ${options.filename}`);
     }
-    else {
-      file.baseName = null;
-      file.path = null;
-    }
-    play.status = 'stopped';
+
+    file.baseName = path.basename(options.filename);
+    file.path = options.filename;
     play.speed = 1;
-
-
-
-    const fs = require('fs');
-    const readline2 = require('readline');
-
-    async function analyseFile() {
-      const fileStream = fs.createReadStream(file.path);
-
-      const rl = readline.createInterface({
-        input: fileStream,
-        crlfDelay: Infinity  // Handles different newline characters
-      });
-
-      for await (const line of rl) {
-        scanLine(line);
-      }
-      ;
-    }
-
-
-
-    function scanLine(line) {
-      if (!isValidNMEA0183(line)) return 0;
-      if (line.substr(3, 3) != "RMC") return 0;
-      const fields = line.split(',');
-      if (!fields[9]) return;
-      const dateTime = toDate(fields[1], fields[9]);
-      if (!file.start) {
-        file.start = dateTime;
-      }
-      file.end = dateTime;
-      return 0;
-    }
-
-    if (!file.path) {
-      app.error("No filename provided");
-      return;
-    } else {
-      play.markerCurrent = null;
-      play.markerTarget = null;
-      file.start = null;
-      file.end = null;
-      play.markerStart = null;
-      play.markerEnd = null;
-      app.debug("Analysing file");
-      analyseFile()
-        .then(result => {
-          play.markerStart = file.start;
-          play.markerEnd = file.end;
-          play.markerCurrent = file.start;
-          app.debug(file);
-          app.debug(play);
-        });
-      /* .catch(err => {
-        app.error('Error analysing file:', err);
-      }); */
-      startReading();
-    }
+    play.status = 'initialising';
+    app.debug("Analysing file");
+    Object.assign(file, await getDateTimeRange(file.path));
+    play.markerStart = new Date(file.start);
+    play.markerCurrent = new Date(play.start);
+    play.markerEnd = new Date(file.end);
+    play.markerTarget = null;
+    play.startedBefore = null;
+    app.debug(play);
+    startReading();
   };
 
 
