@@ -22,7 +22,7 @@ body {
 .progress-container {
     width: 100%;
     max-width: 800px;
-    padding: 20px;
+    padding: 30px 40px 30px 40px;
     background-color: #222;
     border-radius: 15px;
     box-shadow: 0 6px 12px rgba(0, 0, 0, 0.6);
@@ -48,7 +48,6 @@ body {
     height: 10px;
     background-color: #555;
     border-radius: 5px;
-    cursor: pointer;
 }
 
 .loop-start,
@@ -60,6 +59,7 @@ body {
     top: -5px;
     border-radius: 2px;
     display: block; /* Temporarily set to block to check visibility */
+    cursor: pointer;
 }
 
 .loop-start {
@@ -91,29 +91,47 @@ body {
     visibility: hidden;
 }
 
+.marker {
+    font-size: 12px;
+    visibility: visible;
+    width: 60px;
+    background-color: transparent;
+    color: #fff;
+    text-align: center;
+    border-radius: 5px;
+    padding: 5px;
+    position: absolute;
+    bottom: 100%; /* Position the tooltip above the text */
+    left: 50%;
+    margin-left: -36px; /* Center the tooltip */
+    cursor: pointer;
+}
+
+.start .end {
+    bottom: 100%; /* Position the tooltip above the text */
+}
+
+.current {
+    bottom: -300%; 
+}
+
+
 .tooltiptext {
-    visibility: hidden;
+    font-size: 12px;
+    visibility: visible;
     width: 120px;
-    background-color: #111;
+    background-color: transparent;
     color: #fff;
     text-align: center;
     border-radius: 5px;
     padding: 5px;
     position: absolute;
     z-index: 1;
-    bottom: 125%; /* Position the tooltip above the text */
+    bottom: 100%; /* Position the tooltip above the text */
     left: 50%;
     margin-left: -60px; /* Center the tooltip */
     opacity: 0;
     transition: opacity 0.3s;
-}
-
-.loop-start:hover .tooltiptext,
-.loop-end:hover .tooltiptext,
-.playhead:hover .tooltiptext,
-.target:hover .tooltiptext {
-    visibility: visible;
-    opacity: 1;
 }
 
 /* Control Buttons Area */
@@ -126,7 +144,9 @@ body {
     border-radius: 15px;
     box-shadow: 0 6px 12px rgba(0, 0, 0, 0.6);
     width: 100%;
-    max-width: 500px;
+    max-width: 800px;
+    padding: 30px 40px 30px 40px;
+    justify-content: space-between; /* Add this line */
 }
 
 .control-button {
@@ -155,6 +175,12 @@ body {
 
 .control-button:focus {
     outline: none;
+}
+
+.speed-container {
+    margin-left: auto; /* Push the speed controls to the right */
+    display: flex;
+    align-items: center;
 }
 
 .speed-label {

@@ -32,6 +32,8 @@ module.exports = function (app) {
     markerStart: null,
     markerEnd: null,
     startedBefore: null,
+    lastSyncTime: null,
+    lastSyncRmc: null
   };
 
   const file = {
@@ -41,7 +43,6 @@ module.exports = function (app) {
     end: null,
   };
 
-  //let stopEvent = false;
   const fs = require('fs');
   const readline = require('readline');
   const net = require('net');
@@ -93,7 +94,7 @@ module.exports = function (app) {
 
     router.post('/markerEnd', (req, res) => {
       const markerEnd = new Date(req.body.value);
-      if ( play.markerStart < markerEnd &&markerEnd > play.markerCurrent) play.markerEnd = markerEnd;
+      if (play.markerStart < markerEnd && markerEnd > play.markerCurrent) play.markerEnd = markerEnd;
       res.status(200).json(play.markerEnd.toISOString());
     })
 
@@ -104,35 +105,18 @@ module.exports = function (app) {
     })
 
     router.post('/status', (req, res) => {
-      const valid =["playing","paused"];
+      const valid = ["playing", "paused"];
       const status = req.body.value;
-      if (play.status !="stopped" && valid.includes(status)) play.status=status;
+      if (play.status != "stopped" && valid.includes(status)) play.status = status;
       res.status(200).json(play.status);
     })
 
     router.post('/speed', (req, res) => {
       app.debug(req.body.value);
-     play.speed = req.body.value;
-     res.status(200).json(play.speed);
-    })
-
-
-    router.post('/setPlay', (req, res) => {
-      
-      const changes = req.body.value;
-      if ('status' in changes) play.status = changes.status;
-      if ('speed' in changes) play.speed = changes.speed;
-      if ('markerTarget' in changes){
-        if (changes.markerTarget !== null) play.markerTarget = new Date(changes.markerTarget);
-      } 
-      if ('markerStart' in changes){
-       if (play.markerEnd > new Date(changes.markerStart)) play.markerStart = new Date(changes.markerStart);
-      }
-      if ('markerEnd' in changes){
-        if (play.markerStart < new Date(changes.markerEnd)) play.markerEnd = new Date(changes.markerEnd);
-      }
-        
-      res.status(200).send(wrapPlay());
+      play.speed = req.body.value;
+      play.lastSyncRmc = play.markerCurrent;
+      play.lastSyncTime = Date.now();
+      res.status(200).json(play.speed);
     })
 
   }
@@ -147,8 +131,6 @@ module.exports = function (app) {
       markerCurrent: play.markerCurrent ? new Date(play.markerCurrent) : null
     };
   }
-
-
 
   plugin.start = async function (options, restartPlugin) {
 
@@ -165,34 +147,40 @@ module.exports = function (app) {
         return new Promise((resolve) => {
           wait = handleLine(line);
           if (wait) {
-            setTimeout(resolve, wait);
+            setTimeout( resolve, wait);
           } else {
             resolve();
           }
         });
       };
+
+      play.markerCurrent = play.markerStart;
+      resetSync();
       for await (const line of rl) {
         //if (stopEvent) {
-        if (play.status == "stopped") {
-          app.debug(`Stop processing ${file.path}`);
+        if (play.status == "stopping") {
           break;
         }
         while (play.status == 'paused') {
-          await new Promise(resolve => setTimeout(resolve, 500));
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          resetSync();
         }
         await processLine(line);
       }
 
       rl.close();
-      app.debug('Finished reading file.');
     };
 
     const startReading = async () => {
       while (true) {
-        app.debug(`Start processing ${file.baseName}`);
+        app.debug(`Start streaming ${file.baseName}`);
         play.status = "playing";
         await processFile();
-        if (play.status == "stopped") break;
+        app.debug(`Finish streaming ${file.baseName}`);
+        if (play.status == "stopping") {
+          play.status = "stopped";
+          break;
+        }
       }
     };
 
@@ -203,25 +191,32 @@ module.exports = function (app) {
       if (rmcTime) {
         play.markerCurrent = rmcTime;
       }
-      play.status='skipping';
+      play.status = 'skipping';
       //lookingForTarget();
-      if (lookingForTarget()) return 0;
-      if (!withinTimeWindow()) return 0;
-      play.status='playing';
+      if (lookingForTarget()) { resetSync(); return 0 };
+      if (!withinTimeWindow()) { resetSync(); return 0 };
+      play.status = 'playing';
 
       if (rmcTime) {
-        const now = Date.now();
-        waitTime = previousRMCTime ? (rmcTime - previousRMCTime) / play.speed : 0;
-        const elapsedTime = now - previousSendTime;
-        wait = Math.max(waitTime - elapsedTime, 0);
-        if (wait < 100) wait = 0;
-        previousRMCTime = rmcTime;
-        previousSendTime = now;
+        wait = timeToWait(rmcTime);
+        if (wait < 50) {
+          wait = 0;
+        }
       }
       client.write(line + '\n');
       return wait;
     }
 
+    function resetSync() {
+      play.lastSyncRmc = play.markerCurrent;
+      play.lastSyncTime = Date.now();
+    }
+
+    function timeToWait(rmcTime) {
+      const deltaTime = Date.now() - play.lastSyncTime;
+      const deltaRmc = (rmcTime - play.lastSyncRmc);
+      return Math.max(deltaRmc / play.speed - deltaTime, 0);
+    }
 
     function lookingForTarget() {
       if (play.markerTarget === null) return false;
@@ -246,9 +241,6 @@ module.exports = function (app) {
       return (play.markerCurrent > play.markerStart && play.markerCurrent < play.markerEnd);
     }
 
-    let previousRMCTime = new Date(1970, 0, 1);
-    let previousSendTime = new Date(1970, 0, 1);
-
     app.debug("Plugin started with options: ", options);
     try {
       // Check if the file exists and is readable
@@ -271,7 +263,6 @@ module.exports = function (app) {
     play.markerEnd = new Date(file.end);
     play.markerTarget = null;
     play.startedBefore = null;
-    app.debug(play);
     startReading();
   };
 
@@ -279,9 +270,18 @@ module.exports = function (app) {
 
   plugin.stop = function () {
     //stopEvent = true;
-    play.status = "stopped";
-    app.debug("Stopping plugin");
-  };
+    play.status = "stopping";
+    app.debug("Stopping");
+    return new Promise((resolve, reject) => {
+      const interval = setInterval(() => {
+        if (play.status == "stopped") {
+          clearInterval(interval);
+          app.debug("Stopped");
+          resolve('Value met!');
+        }
+      }, 100);
+    });
+  }
 
   return plugin;
 };

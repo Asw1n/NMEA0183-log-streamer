@@ -6,44 +6,52 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Playback Controls with Looping</title>
     <link rel="stylesheet" href="style.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
 </head>
 
 <body>
     <div class="container">
         <div class="progress-container">
             <div class="progress-bar" id="progressBar">
-                <div class="loop-start" id="markerStart"><span class="tooltiptext" id="tooltipStart">Start</span></div>
-                <div class="loop-end" id="markerEnd"><span class="tooltiptext" id="tooltipEnd">End</span></div>
+                <div class="loop-start" id="markerStart"><span class="marker start" id="tooltipStart">Start</span></div>
+                <div class="loop-end" id="markerEnd"><span class="marker end" id="tooltipEnd">End</span></div>
                 <div class="target" id="markerTarget"><span class="tooltiptext" id="tooltipTarget">Target</span></div>
-                <div class="playhead" id="markerCurrent"><span class="tooltiptext" id="tooltipCurrent">Current</span>
+                <div class="playhead" id="markerCurrent"><span class="marker current" id="tooltipCurrent">Current</span>
                 </div>
             </div>
         </div>
         <div class="dvd-controls">
             <button id="rewindButton" class="control-button">
-                <i class="fas fa-backward"></i>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M11 19L2 12L11 5V19Z" fill="currentColor"/>
+                    <path d="M22 19L13 12L22 5V19Z" fill="currentColor"/>
+                </svg>
             </button>
             <button id="playButton" class="control-button">
-                <i class="fas fa-play"></i>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M8 5V19L19 12L8 5Z" fill="currentColor"/>
+                </svg>
             </button>
             <button id="pauseButton" class="control-button">
-                <i class="fas fa-pause"></i>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M6 19H10V5H6V19ZM14 5V19H18V5H14Z" fill="currentColor"/>
+                </svg>
             </button>
-            <label for="speedSelect" class="speed-label">Speed:</label>
-            <select id="speedSelect" class="speed-select">
-                <option value="1">1x</option>
-                <option value="2">2x</option>
-                <option value="6">6x</option>
-                <option value="15">15x</option>
-                <option value="30">30x</option>
-                <option value="60">60x</option>
-            </select>
+            <div class="speed-container">
+                <label for="speedSelect" class="speed-label">Speed:</label>
+                <select id="speedSelect" class="speed-select">
+                    <option value="1">1x</option>
+                    <option value="2">2x</option>
+                    <option value="6">6x</option>
+                    <option value="15">15x</option>
+                    <option value="30">30x</option>
+                    <option value="60">60x</option>
+                </select>
+            </div>
         </div>
-        <div >
+        <div>
             <p id="status">Initialising</p>
         </div>
-        </div>
+    </div>
     <script src="app.js"></script>
 </body>
 
