@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,6 +8,7 @@
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
 </head>
+
 <body>
     <div class="container">
         <div class="progress-container">
@@ -14,10 +16,11 @@
                 <div class="loop-start" id="markerStart"><span class="tooltiptext" id="tooltipStart">Start</span></div>
                 <div class="loop-end" id="markerEnd"><span class="tooltiptext" id="tooltipEnd">End</span></div>
                 <div class="target" id="markerTarget"><span class="tooltiptext" id="tooltipTarget">Target</span></div>
-                <div class="playhead" id="markerCurrent"><span class="tooltiptext" id="tooltipCurrent">Current</span></div>
+                <div class="playhead" id="markerCurrent"><span class="tooltiptext" id="tooltipCurrent">Current</span>
+                </div>
             </div>
         </div>
-         <div class="dvd-controls">
+        <div class="dvd-controls">
             <button id="rewindButton" class="control-button">
                 <i class="fas fa-backward"></i>
             </button>
@@ -31,15 +34,17 @@
             <select id="speedSelect" class="speed-select">
                 <option value="1">1x</option>
                 <option value="2">2x</option>
-                <option value="5">5x</option>
-                <option value="10">10x</option>
-                <option value="20">20x</option>
-                <option value="50">50x</option>
+                <option value="6">6x</option>
+                <option value="15">15x</option>
+                <option value="30">30x</option>
+                <option value="60">60x</option>
             </select>
         </div>
-    </div>
-    <p id="status">Initialising</p>
-
+        <div >
+            <p id="status">Initialising</p>
+        </div>
+        </div>
     <script src="app.js"></script>
 </body>
+
 </html>

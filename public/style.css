@@ -1,5 +1,6 @@
 body {
     font-family: Arial, sans-serif;
+    font-size: 20px;
     display: flex;
     justify-content: center;
     align-items: center;
@@ -20,7 +21,7 @@ body {
 /* Progress Container */
 .progress-container {
     width: 100%;
-    max-width: 500px;
+    max-width: 800px;
     padding: 20px;
     background-color: #222;
     border-radius: 15px;
@@ -29,9 +30,9 @@ body {
     justify-content: center;
 }
 
-.file-info{
+.file-info {
     width: 100%;
-    max-width: 500px;
+    max-width: 800px;
     padding: 20px;
     background-color: #222;
     border-radius: 15px;
@@ -105,15 +106,15 @@ body {
     margin-left: -60px; /* Center the tooltip */
     opacity: 0;
     transition: opacity 0.3s;
-  }
-  
-  .loop-start:hover .tooltiptext,
-  .loop-end:hover .tooltiptext,
-  .playhead:hover .tooltiptext,
-  .target:hover .tooltiptext {
+}
+
+.loop-start:hover .tooltiptext,
+.loop-end:hover .tooltiptext,
+.playhead:hover .tooltiptext,
+.target:hover .tooltiptext {
     visibility: visible;
     opacity: 1;
-  }
+}
 
 /* Control Buttons Area */
 .dvd-controls {
@@ -129,13 +130,12 @@ body {
 }
 
 .control-button {
-    font-size: 22px;
     color: #fff;
     background-color: #555;
     border: none;
     border-radius: 50%;
-    width: 60px;
-    height: 60px;
+    width: 40px;
+    height: 40px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -150,6 +150,7 @@ body {
 
 .control-button:active {
     transform: scale(0.95);
+    border: 1px solid rgba(0, 0, 0, 0.3);
 }
 
 .control-button:focus {
@@ -157,12 +158,11 @@ body {
 }
 
 .speed-label {
-    font-size: 20px;
     margin-right: 8px;
 }
 
 .speed-select {
-    font-size: 20px;
+    font-size: inherit;
     padding: 8px;
     border: none;
     border-radius: 8px;
@@ -176,10 +176,29 @@ body {
 }
 
 #status {
-    position: absolute;
-    bottom: 20px;
-    left: 50%;
-    transform: translateX(-50%);
-    font-size: 22px;
     text-align: center;
+}
+
+/* Responsive styles */
+@media (max-width: 600px) {
+    body {
+        font-size: 16px;
+    }
+
+    .container {
+        gap: 10px;
+    }
+
+    .progress-container, .file-info, .dvd-controls {
+        padding: 10px;
+    }
+
+    .control-button {
+        width: 30px;
+        height: 30px;
+    }
+
+    .speed-label, .speed-select {
+        font-size: 14px;
+    }
 }

@@ -5,6 +5,7 @@ const markerStart = document.getElementById('markerStart');
 const markerEnd = document.getElementById('markerEnd');
 const markerCurrent = document.getElementById('markerCurrent');
 const markerTarget = document.getElementById('markerTarget');
+const speedSelect = document.getElementById('speedSelect');
 markerStart.endpoint = "setStart";
 markerStart.position = 0;
 markerEnd.endpoint = "setEnd";
@@ -54,11 +55,12 @@ function onDrag(event, marker) {
     const barWidth = barRect.width;
     const offsetX = event.clientX - barRect.left;
     position = Math.min(100, Math.max(0, (offsetX / barWidth) * 100));
-    //marker.style.left = `${position}%`;
-    play[marker.id] = PercentageToDate(position);
-    setPlay();
-
-
+    postToServer(marker.id, PercentageToDate(position).toISOString())
+    .then(data => {
+        const date = new Date(data);
+        play[marker.id] = date; 
+        placeMarker(marker, date); 
+    })
 }
 
 
@@ -81,6 +83,7 @@ function getFile() {
             file.end = new Date(data.end);
         })
         .catch(error => {
+            updateStatus("Error connecting to server");
             console.error("Error while getting file", error);
         });
 }
@@ -90,30 +93,24 @@ function getPlay() {
         .then(data => {
             updatePlay(data);
             updateMarkers();
+            updateSpeed();
             updateStatus( play.status);
         })
         .catch(error => {
+            updateStatus("Error connecting to server");
             console.error("Error while getting play", error);
         });
 }
 
-function setPlay() {
-    const to = {
-        status: play.status,
-        speed: play.speed,
-        markerTarget: play.markerTarget === null ? null : play.markerTarget.toISOString(),
-        markerStart: play.markerStart === null ? null : play.markerStart.toISOString(),
-        markerEnd: play.markerEnd === null ? null : play.markerEnd.toISOString()
-    }
-    postToServer("setPlay", to)
-        .then(data => {
-            updatePlay(data);
-            updateMarkers();
-            updateStatus( play.status);
-        })
-        .catch(error => {
-            console.error("Error while setting play", error);
-        });
+
+function setMarker(id, position) {
+    postToServer(id, PercentageToDate(position).toISOString())
+    .then(data => {})
+    .catch(error => {
+        updateStatus("Error connecting to server");
+        console.error("Error while setting play", error);
+    });
+
 }
 
 
@@ -133,12 +130,16 @@ function updateMarkers() {
     placeMarker(markerTarget, play.markerTarget);
 }
 
+function updateSpeed() {
+    speedSelect.value = play.speed;
+}
+
 function placeMarker(marker, date) {
     if (date === null) {
-        markerTarget.style.visibility = "hidden";
+        marker.style.visibility = "hidden";
     }
     else {
-        markerTarget.style.visibility = "visible";
+        marker.style.visibility = "visible";
         marker.style.left = `${dateToPercentage(date)}%`;
         marker.firstElementChild.innerHTML = date.toLocaleTimeString();
     }
@@ -231,10 +232,10 @@ window.onload = () => {
     enableDragging(markerStart);
     enableDragging(markerEnd);
     // Add event listeners to buttons
-    document.getElementById('rewindButton').addEventListener('click', () => { play.markerTarget = play.markerStart; setPlay(); });
-    document.getElementById('playButton').addEventListener('click', () => { play.status = "playing"; setPlay(); });
-    document.getElementById('pauseButton').addEventListener('click', () => { play.status = "paused"; setPlay(); });
-    document.getElementById('speedSelect').addEventListener('change', (event) => { play.speed = event.target.value; setPlay(); });
+    document.getElementById('rewindButton').addEventListener('click', () => { postToServer("markerTarget",play.markerStart); getPlay(); });
+    document.getElementById('playButton').addEventListener('click', () => { postToServer("status","playing"); getPlay(); });
+    document.getElementById('pauseButton').addEventListener('click', () => { postToServer("status","paused"); getPlay(); });
+    document.getElementById('speedSelect').addEventListener('change', (event) => { postToServer("speed", event.target.value); getPlay(); });
     getFile();
     update();
 };

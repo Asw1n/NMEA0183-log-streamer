@@ -1,7 +1,7 @@
 {
   "name": "nmea-streamer",
-  "version": "2.0.0",
-  "description": "The plugin streams a file with NMEA0183 messages to the SignalK server at a configurable speed.",
+  "version": "2.1.0",
+  "description": "The plugin streams a file with NMEA0183 messages to the SignalK server at a configurable speed. It also provides a web app with play controls.",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
