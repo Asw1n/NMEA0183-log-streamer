@@ -52,6 +52,10 @@ module.exports = function (app) {
     getDateTimeRange,
     isNmeaMessage,
     isAisMessage, } = require('./nmeautils');
+
+  // Track active streaming resources so stop() can tear them down directly
+  let currentFileStream = null;
+  let currentReadline = null;
   // Connect to TCP server
   {
     client.connect(10110, 'localhost', () => {
@@ -136,10 +140,10 @@ module.exports = function (app) {
 
     // Proces log file
     const processFile = async () => {
-      const fileStream = fs.createReadStream(file.path);
+      currentFileStream = fs.createReadStream(file.path);
 
-      const rl = readline.createInterface({
-        input: fileStream,
+      currentReadline = readline.createInterface({
+        input: currentFileStream,
         crlfDelay: Infinity
       });
 
@@ -156,7 +160,7 @@ module.exports = function (app) {
 
       play.markerCurrent = play.markerStart;
       resetSync();
-      for await (const line of rl) {
+      for await (const line of currentReadline) {
         //if (stopEvent) {
         if (play.status == "stopping") {
           break;
@@ -167,8 +171,14 @@ module.exports = function (app) {
         }
         await processLine(line);
       }
-
-      rl.close();
+      if (currentReadline) {
+        currentReadline.close();
+        currentReadline = null;
+      }
+      if (currentFileStream) {
+        currentFileStream.destroy();
+        currentFileStream = null;
+      }
     };
 
     const startReading = async () => {
@@ -186,6 +196,7 @@ module.exports = function (app) {
 
     function handleLine(line) {
       let wait = 0;
+      // Only process lines that are either valid NMEA or valid AIS
       if (!isNmeaMessage(line) && !isAisMessage(line)) return 0;
       const rmcTime = getDate(line);
       if (rmcTime) {
@@ -213,9 +224,17 @@ module.exports = function (app) {
     }
 
     function timeToWait(rmcTime) {
+      // If we have no anchor yet or the log time moves backwards,
+      // re-sync to the current message and don't delay this line.
+      if (!play.lastSyncRmc || rmcTime < play.lastSyncRmc) {
+        resetSync();
+        return 0;
+      }
+
       const deltaTime = Date.now() - play.lastSyncTime;
       const deltaRmc = (rmcTime - play.lastSyncRmc);
-      return Math.max(deltaRmc / play.speed - deltaTime, 0);
+      const wait = deltaRmc / play.speed - deltaTime;
+      return wait > 0 ? wait : 0;
     }
 
     function lookingForTarget() {
@@ -253,13 +272,15 @@ module.exports = function (app) {
     }
 
     file.baseName = path.basename(options.filename);
-    file.path = options.filename;
+    file.path = typeof options.filename === 'string'
+      ? options.filename.replace(/^"(.*)"$/, '$1')
+      : options.filename;
     play.speed = 1;
     play.status = 'initialising';
     app.debug("Analysing file");
     Object.assign(file, await getDateTimeRange(file.path));
     play.markerStart = new Date(file.start);
-    play.markerCurrent = new Date(play.start);
+    play.markerCurrent = new Date(file.start);
     play.markerEnd = new Date(file.end);
     play.markerTarget = null;
     play.startedBefore = null;
@@ -269,18 +290,45 @@ module.exports = function (app) {
 
 
   plugin.stop = function () {
-    //stopEvent = true;
-    play.status = "stopping";
     app.debug("Stopping");
-    return new Promise((resolve, reject) => {
-      const interval = setInterval(() => {
-        if (play.status == "stopped") {
-          clearInterval(interval);
-          app.debug("Stopped");
-          resolve('Value met!');
-        }
-      }, 100);
-    });
+
+    // If already fully stopped, resolve immediately
+    if (play.status === "stopped") {
+      return Promise.resolve('Already stopped');
+    }
+
+    // Mark stopping and aggressively tear down active resources
+    play.status = "stopping";
+
+    if (currentReadline) {
+      try {
+        currentReadline.close();
+      } catch (e) {
+        app.error('Error closing readline:', e);
+      }
+      currentReadline = null;
+    }
+
+    if (currentFileStream) {
+      try {
+        currentFileStream.destroy();
+      } catch (e) {
+        app.error('Error destroying file stream:', e);
+      }
+      currentFileStream = null;
+    }
+
+    try {
+      client.end();
+    } catch (e) {
+      app.error('Error closing TCP client:', e);
+    }
+
+    // Since we've torn everything down, we can safely mark stopped
+    play.status = "stopped";
+    app.debug("Stopped");
+
+    return Promise.resolve('Stopped');
   }
 
   return plugin;

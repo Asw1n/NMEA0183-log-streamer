@@ -58,7 +58,7 @@ function validCheckSum(line) {
 }
 
 function isAisMessage(line) {
-    if (!line.startsWith('$AIVDM') && !line.startsWith('$AIVDO'))  return false;
+    if (!line.startsWith('!AIVDM') && !line.startsWith('!AIVDO')) return false;
     if (!validCheckSum(line)) return false;
     return true;
 }
